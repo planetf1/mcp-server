@@ -6,6 +6,10 @@ MCP server for experimenting with LLM tools
 * Install 'uv'
 * run `uv sync`
 
+## Unit tests
+
+* `uv run pytest`
+
 ## Launch the server
 
 `uv run mcp dev server.py`
