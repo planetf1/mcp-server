@@ -3,7 +3,7 @@ import base64
 import httpx
 from typing import Optional, Dict, List, Any, Union
 from mcp_instance import mcp
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 class GitHubToolError(Exception):
     """Exception raised for GitHub tool errors."""
@@ -43,7 +43,7 @@ async def github_get_file(repo: str, path: str, ref: str = "main") -> Dict[str, 
         elif response.status_code != 200:
             raise GitHubToolError(f"GitHub API error: {response.status_code} - {response.text}")
         
-        data = response.json()
+        data = await response.json()
         
         if data.get("type") != "file":
             return {"error": f"Path does not point to a file: {path}"}
@@ -94,7 +94,7 @@ async def github_list_issues(repo: str, state: str = "open", labels: str = "") -
         if response.status_code != 200:
             raise GitHubToolError(f"GitHub API error: {response.status_code} - {response.text}")
         
-        issues = response.json()
+        issues = await response.json()
         
         # Filter out pull requests (GitHub API returns PRs as issues)
         return [
@@ -153,7 +153,7 @@ async def github_create_issue(repo: str, title: str, body: str, labels: Optional
         if response.status_code != 201:
             raise GitHubToolError(f"GitHub API error: {response.status_code} - {response.text}")
         
-        issue = response.json()
+        issue = await response.json()
         return {
             "number": issue["number"],
             "title": issue["title"],
@@ -193,7 +193,7 @@ async def github_list_pull_requests(repo: str, state: str = "open") -> List[Dict
         if response.status_code != 200:
             raise GitHubToolError(f"GitHub API error: {response.status_code} - {response.text}")
         
-        prs = response.json()
+        prs = await response.json()
         return [
             {
                 "number": pr["number"],
@@ -241,7 +241,8 @@ async def github_search_code(query: str, repo: Optional[str] = None) -> Dict[str
         if response.status_code != 200:
             raise GitHubToolError(f"GitHub API error: {response.status_code} - {response.text}")
         
-        results = response.json()
+        # Need to await the JSON response
+        results = await response.json()
         return {
             "total_count": results["total_count"],
             "items": [
@@ -269,7 +270,8 @@ async def github_user_activity(username: str, days: int = 7, token: str = None) 
         Summary of user's GitHub activity including issues, PRs, and comments
     """
     # Calculate the date range
-    end_date = datetime.utcnow()
+    # Use datetime.now(UTC) instead of utcnow() which is deprecated
+    end_date = datetime.now(UTC)
     start_date = end_date - timedelta(days=days)
     since = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
     
@@ -306,7 +308,9 @@ async def github_user_activity(username: str, days: int = 7, token: str = None) 
         )
         
         if issues_response.status_code == 200:
-            for issue in issues_response.json().get("items", []):
+            # Await the JSON method
+            issues_data = await issues_response.json()
+            for issue in issues_data.get("items", []):
                 issues_opened.append({
                     "title": issue.get("title"),
                     "url": issue.get("html_url"),
@@ -326,7 +330,9 @@ async def github_user_activity(username: str, days: int = 7, token: str = None) 
         )
         
         if prs_response.status_code == 200:
-            for pr in prs_response.json().get("items", []):
+            # Await the JSON method
+            prs_data = await prs_response.json()
+            for pr in prs_data.get("items", []):
                 pr_info = {
                     "title": pr.get("title"),
                     "url": pr.get("html_url"),
@@ -343,7 +349,7 @@ async def github_user_activity(username: str, days: int = 7, token: str = None) 
                         headers=headers
                     )
                     if pr_detail_response.status_code == 200:
-                        pr_detail = pr_detail_response.json()
+                        pr_detail = await pr_detail_response.json()
                         if pr_detail.get("merged"):
                             prs_merged.append(pr_info)
         
@@ -359,7 +365,9 @@ async def github_user_activity(username: str, days: int = 7, token: str = None) 
         )
         
         if comments_response.status_code == 200:
-            for item in comments_response.json().get("items", []):
+            # Await the JSON method
+            comments_data = await comments_response.json()
+            for item in comments_data.get("items", []):
                 comment_info = {
                     "title": item.get("title"),
                     "url": item.get("html_url"),
@@ -387,7 +395,9 @@ async def github_user_activity(username: str, days: int = 7, token: str = None) 
         )
         
         if reviews_response.status_code == 200:
-            for review in reviews_response.json().get("items", []):
+            # Await the JSON method
+            reviews_data = await reviews_response.json()
+            for review in reviews_data.get("items", []):
                 pr_reviews.append({
                     "title": review.get("title"),
                     "url": review.get("html_url"),

@@ -36,7 +36,11 @@ async def calculator(expression: str) -> dict:
     
     # Define a safe evaluator
     def eval_expr(node: ast.AST) -> Union[float, int]:
-        if isinstance(node, ast.Num):
+        # Use ast.Constant for Python 3.8+ but handle numeric values in a version-agnostic way
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        # Handle old-style numeric nodes without direct reference to ast.Num
+        elif hasattr(node, 'n') and not isinstance(node, (ast.Constant, ast.BinOp, ast.UnaryOp, ast.Call)):
             return node.n
         elif isinstance(node, ast.BinOp):
             return operators[type(node.op)](eval_expr(node.left), eval_expr(node.right))

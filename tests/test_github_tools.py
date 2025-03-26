@@ -22,25 +22,18 @@ from tools.tool_github import (
 class TestGitHubTools:
     """Test cases for GitHub API tools."""
     
-    @pytest.mark.asyncio
     @pytest.fixture(autouse=True)
-    async def setup(self, mock_httpx_client, github_token_env):
+    def setup(self, mock_httpx_client, github_token_env):
         """Set up test environment."""
         self.client, self.response = mock_httpx_client
         
-        # Patch httpx.AsyncClient to return our mock
-        patcher = patch('httpx.AsyncClient', return_value=self.client)
-        patcher.start()
-        yield
-        patcher.stop()
-
     @pytest.mark.asyncio
     async def test_github_get_file(self):
         """Test retrieving a file from GitHub."""
         # Setup mock response
         content = "This is test content"
         encoded_content = base64.b64encode(content.encode()).decode()
-        self.response.json.return_value = {
+        self.response.json = AsyncMock(return_value={
             "type": "file",
             "content": encoded_content,
             "name": "test.txt",
@@ -48,46 +41,64 @@ class TestGitHubTools:
             "sha": "abc123",
             "size": len(content),
             "html_url": "https://github.com/testuser/testrepo/blob/main/test/test.txt"
-        }
+        })
         
-        result = await github_get_file("testuser/testrepo", "test/test.txt")
+        # Create a mock context manager for AsyncClient
+        async_cm = AsyncMock()
+        async_cm.__aenter__.return_value = self.client
         
-        # Verify client was called with correct parameters
-        self.client.get.assert_called_once()
-        args, kwargs = self.client.get.call_args
-        assert args[0] == "https://api.github.com/repos/testuser/testrepo/contents/test/test.txt"
-        assert kwargs["params"] == {"ref": "main"}
+        # Patch httpx.AsyncClient to return our mock
+        with patch('httpx.AsyncClient', return_value=async_cm):
+            result = await github_get_file("testuser/testrepo", "test/test.txt")
         
-        # Verify response content
-        assert result["content"] == content
-        assert result["name"] == "test.txt"
-        assert result["path"] == "test/test.txt"
+            # Verify client was called with correct parameters
+            self.client.get.assert_called_once()
+            args, kwargs = self.client.get.call_args
+            assert args[0] == "https://api.github.com/repos/testuser/testrepo/contents/test/test.txt"
+            assert kwargs["params"] == {"ref": "main"}
+            
+            # Verify response content
+            assert result["content"] == content
+            assert result["name"] == "test.txt"
+            assert result["path"] == "test/test.txt"
     
     @pytest.mark.asyncio
     async def test_github_get_file_not_found(self):
         """Test handling of file not found."""
         self.response.status_code = 404
         
-        result = await github_get_file("testuser/testrepo", "nonexistent.txt")
+        # Create a mock context manager for AsyncClient
+        async_cm = AsyncMock()
+        async_cm.__aenter__.return_value = self.client
         
-        assert "error" in result
-        assert "not found" in result["error"].lower()
+        # Patch httpx.AsyncClient to return our mock
+        with patch('httpx.AsyncClient', return_value=async_cm):
+            result = await github_get_file("testuser/testrepo", "nonexistent.txt")
+            
+            assert "error" in result
+            assert "not found" in result["error"].lower()
     
     @pytest.mark.asyncio
     async def test_github_get_file_not_a_file(self):
         """Test handling when path is not a file."""
         self.response.status_code = 200
-        self.response.json.return_value = {"type": "dir"}
+        self.response.json = AsyncMock(return_value={"type": "dir"})
         
-        result = await github_get_file("testuser/testrepo", "dir")
+        # Create a mock context manager for AsyncClient
+        async_cm = AsyncMock()
+        async_cm.__aenter__.return_value = self.client
         
-        assert "error" in result
-        assert "not a file" in result["error"].lower() or "file" in result["error"].lower()
+        # Patch httpx.AsyncClient to return our mock
+        with patch('httpx.AsyncClient', return_value=async_cm):
+            result = await github_get_file("testuser/testrepo", "dir")
+            
+            assert "error" in result
+            assert "not a file" in result["error"].lower() or "file" in result["error"].lower()
     
     @pytest.mark.asyncio
     async def test_github_list_issues(self):
         """Test listing issues from a repository."""
-        self.response.json.return_value = [
+        self.response.json = AsyncMock(return_value=[
             {
                 "number": 1,
                 "title": "Test Issue",
@@ -99,58 +110,70 @@ class TestGitHubTools:
                 "labels": [{"name": "bug"}],
                 "body": "This is a test issue"
             }
-        ]
+        ])
         
-        result = await github_list_issues("testuser/testrepo")
+        # Create a mock context manager for AsyncClient
+        async_cm = AsyncMock()
+        async_cm.__aenter__.return_value = self.client
         
-        # Verify client was called correctly
-        self.client.get.assert_called_once()
-        args, kwargs = self.client.get.call_args
-        assert args[0] == "https://api.github.com/repos/testuser/testrepo/issues"
-        assert kwargs["params"] == {"state": "open"}
-        
-        # Verify response content
-        assert len(result) == 1
-        assert result[0]["number"] == 1
-        assert result[0]["title"] == "Test Issue"
-        assert result[0]["labels"] == ["bug"]
+        # Patch httpx.AsyncClient to return our mock
+        with patch('httpx.AsyncClient', return_value=async_cm):
+            result = await github_list_issues("testuser/testrepo")
+            
+            # Verify client was called correctly
+            self.client.get.assert_called_once()
+            args, kwargs = self.client.get.call_args
+            assert args[0] == "https://api.github.com/repos/testuser/testrepo/issues"
+            assert kwargs["params"] == {"state": "open"}
+            
+            # Verify response content
+            assert len(result) == 1
+            assert result[0]["number"] == 1
+            assert result[0]["title"] == "Test Issue"
+            assert result[0]["labels"] == ["bug"]
     
     @pytest.mark.asyncio
     async def test_github_create_issue(self):
         """Test creating an issue in a repository."""
         self.response.status_code = 201
-        self.response.json.return_value = {
+        self.response.json = AsyncMock(return_value={
             "number": 2,
             "title": "New Issue",
             "html_url": "https://github.com/testuser/testrepo/issues/2",
             "state": "open",
             "created_at": "2023-01-03T00:00:00Z"
-        }
+        })
         
-        result = await github_create_issue(
-            "testuser/testrepo", 
-            "New Issue", 
-            "This is a new issue", 
-            ["bug", "enhancement"]
-        )
+        # Create a mock context manager for AsyncClient
+        async_cm = AsyncMock()
+        async_cm.__aenter__.return_value = self.client
         
-        # Verify client was called correctly
-        self.client.post.assert_called_once()
-        args, kwargs = self.client.post.call_args
-        assert args[0] == "https://api.github.com/repos/testuser/testrepo/issues"
-        assert kwargs["json"]["title"] == "New Issue"
-        assert kwargs["json"]["body"] == "This is a new issue"
-        assert kwargs["json"]["labels"] == ["bug", "enhancement"]
-        
-        # Verify response content
-        assert result["number"] == 2
-        assert result["title"] == "New Issue"
-        assert result["state"] == "open"
+        # Patch httpx.AsyncClient to return our mock
+        with patch('httpx.AsyncClient', return_value=async_cm):
+            result = await github_create_issue(
+                "testuser/testrepo", 
+                "New Issue", 
+                "This is a new issue", 
+                ["bug", "enhancement"]
+            )
+            
+            # Verify client was called correctly
+            self.client.post.assert_called_once()
+            args, kwargs = self.client.post.call_args
+            assert args[0] == "https://api.github.com/repos/testuser/testrepo/issues"
+            assert kwargs["json"]["title"] == "New Issue"
+            assert kwargs["json"]["body"] == "This is a new issue"
+            assert kwargs["json"]["labels"] == ["bug", "enhancement"]
+            
+            # Verify response content
+            assert result["number"] == 2
+            assert result["title"] == "New Issue"
+            assert result["state"] == "open"
     
     @pytest.mark.asyncio
     async def test_github_list_pull_requests(self):
         """Test listing pull requests from a repository."""
-        self.response.json.return_value = [
+        self.response.json = AsyncMock(return_value=[
             {
                 "number": 3,
                 "title": "Test PR",
@@ -162,27 +185,33 @@ class TestGitHubTools:
                 "head": {"ref": "feature-branch"},
                 "base": {"ref": "main"}
             }
-        ]
+        ])
         
-        result = await github_list_pull_requests("testuser/testrepo")
+        # Create a mock context manager for AsyncClient
+        async_cm = AsyncMock()
+        async_cm.__aenter__.return_value = self.client
         
-        # Verify client was called correctly
-        self.client.get.assert_called_once()
-        args, kwargs = self.client.get.call_args
-        assert args[0] == "https://api.github.com/repos/testuser/testrepo/pulls"
-        assert kwargs["params"] == {"state": "open"}
-        
-        # Verify response content
-        assert len(result) == 1
-        assert result[0]["number"] == 3
-        assert result[0]["title"] == "Test PR"
-        assert result[0]["head"] == "feature-branch"
-        assert result[0]["base"] == "main"
+        # Patch httpx.AsyncClient to return our mock
+        with patch('httpx.AsyncClient', return_value=async_cm):
+            result = await github_list_pull_requests("testuser/testrepo")
+            
+            # Verify client was called correctly
+            self.client.get.assert_called_once()
+            args, kwargs = self.client.get.call_args
+            assert args[0] == "https://api.github.com/repos/testuser/testrepo/pulls"
+            assert kwargs["params"] == {"state": "open"}
+            
+            # Verify response content
+            assert len(result) == 1
+            assert result[0]["number"] == 3
+            assert result[0]["title"] == "Test PR"
+            assert result[0]["head"] == "feature-branch"
+            assert result[0]["base"] == "main"
     
     @pytest.mark.asyncio
     async def test_github_search_code(self):
         """Test searching for code on GitHub."""
-        self.response.json.return_value = {
+        self.response.json = AsyncMock(return_value={
             "total_count": 1,
             "items": [
                 {
@@ -192,45 +221,50 @@ class TestGitHubTools:
                     "html_url": "https://github.com/testuser/testrepo/blob/main/src/example.py"
                 }
             ]
-        }
+        })
         
-        result = await github_search_code("test", "testuser/testrepo")
+        # Create a mock context manager for AsyncClient
+        async_cm = AsyncMock()
+        async_cm.__aenter__.return_value = self.client
         
-        # Verify client was called correctly
-        self.client.get.assert_called_once()
-        args, kwargs = self.client.get.call_args
-        assert args[0] == "https://api.github.com/search/code"
-        assert kwargs["params"]["q"] == "test repo:testuser/testrepo"
-        
-        # Verify response content
-        assert result["total_count"] == 1
-        assert len(result["items"]) == 1
-        assert result["items"][0]["repository"] == "testuser/testrepo"
-        assert result["items"][0]["path"] == "src/example.py"
+        # Patch httpx.AsyncClient to return our mock
+        with patch('httpx.AsyncClient', return_value=async_cm):
+            result = await github_search_code("test", "testuser/testrepo")
+            
+            # Verify client was called correctly
+            self.client.get.assert_called_once()
+            args, kwargs = self.client.get.call_args
+            assert args[0] == "https://api.github.com/search/code"
+            assert kwargs["params"]["q"] == "test repo:testuser/testrepo"
+            
+            # Verify response content
+            assert result["total_count"] == 1
+            assert len(result["items"]) == 1
+            assert result["items"][0]["repository"] == "testuser/testrepo"
+            assert result["items"][0]["path"] == "src/example.py"
     
     @pytest.mark.asyncio
     async def test_github_user_activity(self):
         """Test retrieving user activity."""
-        # We need to create side effects for multiple calls
-        # Reset the mock and create side effects for the sequence of calls
-        self.client.get.reset_mock()
+        # Setup multiple response objects for the sequence of API calls
+        user_response = AsyncMock()
+        user_response.status_code = 200
+        user_response.json = AsyncMock(return_value={"login": "testuser"})
         
-        # Setup sequence of responses
-        user_response = AsyncMock(status_code=200)
-        user_response.json.return_value = {"login": "testuser"}
-        
-        issues_response = AsyncMock(status_code=200)
-        issues_response.json.return_value = {"items": [
+        issues_response = AsyncMock()
+        issues_response.status_code = 200
+        issues_response.json = AsyncMock(return_value={"items": [
             {
                 "title": "Issue Title",
                 "html_url": "https://github.com/testuser/testrepo/issues/1",
                 "created_at": "2023-01-01T00:00:00Z",
                 "repository_url": "https://api.github.com/repos/testuser/testrepo"
             }
-        ]}
+        ]})
         
-        prs_response = AsyncMock(status_code=200)
-        prs_response.json.return_value = {"items": [
+        prs_response = AsyncMock()
+        prs_response.status_code = 200
+        prs_response.json = AsyncMock(return_value={"items": [
             {
                 "title": "PR Title",
                 "html_url": "https://github.com/testuser/testrepo/pull/2",
@@ -239,32 +273,36 @@ class TestGitHubTools:
                 "state": "open",
                 "pull_request": {"url": "https://api.github.com/repos/testuser/testrepo/pulls/2"}
             }
-        ]}
+        ]})
         
-        pr_detail_response = AsyncMock(status_code=200)
-        pr_detail_response.json.return_value = {"merged": True}
+        pr_detail_response = AsyncMock()
+        pr_detail_response.status_code = 200
+        pr_detail_response.json = AsyncMock(return_value={"merged": True})
         
-        comments_response = AsyncMock(status_code=200)
-        comments_response.json.return_value = {"items": [
+        comments_response = AsyncMock()
+        comments_response.status_code = 200
+        comments_response.json = AsyncMock(return_value={"items": [
             {
                 "title": "Commented Issue",
                 "html_url": "https://github.com/testuser/testrepo/issues/3",
                 "updated_at": "2023-01-03T00:00:00Z",
                 "repository_url": "https://api.github.com/repos/testuser/testrepo"
             }
-        ]}
+        ]})
         
-        reviews_response = AsyncMock(status_code=200)
-        reviews_response.json.return_value = {"items": [
+        reviews_response = AsyncMock()
+        reviews_response.status_code = 200
+        reviews_response.json = AsyncMock(return_value={"items": [
             {
                 "title": "Reviewed PR",
                 "html_url": "https://github.com/testuser/testrepo/pull/4",
                 "updated_at": "2023-01-04T00:00:00Z",
                 "repository_url": "https://api.github.com/repos/testuser/testrepo"
             }
-        ]}
+        ]})
         
-        # Setup side effects
+        # Reset mock and configure side effects for sequence of calls
+        self.client.get.reset_mock()
         self.client.get.side_effect = [
             user_response,
             issues_response,
@@ -274,13 +312,19 @@ class TestGitHubTools:
             reviews_response
         ]
         
-        result = await github_user_activity("testuser")
+        # Create a mock context manager for AsyncClient
+        async_cm = AsyncMock()
+        async_cm.__aenter__.return_value = self.client
         
-        # Verify result structure
-        assert result["username"] == "testuser"
-        assert "period" in result
-        assert result["summary"]["issues_opened_count"] == 1
-        assert result["summary"]["prs_opened_count"] == 1
-        assert result["summary"]["prs_merged_count"] == 1
-        assert result["summary"]["issues_commented_count"] == 1
-        assert result["summary"]["pr_reviews_count"] == 1
+        # Patch httpx.AsyncClient to return our mock
+        with patch('httpx.AsyncClient', return_value=async_cm):
+            result = await github_user_activity("testuser")
+            
+            # Verify result structure
+            assert result["username"] == "testuser"
+            assert "period" in result
+            assert result["summary"]["issues_opened_count"] == 1
+            assert result["summary"]["prs_opened_count"] == 1
+            assert result["summary"]["prs_merged_count"] == 1
+            assert result["summary"]["issues_commented_count"] == 1
+            assert result["summary"]["pr_reviews_count"] == 1
