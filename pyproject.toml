@@ -12,12 +12,14 @@ authors = [
     {name = "Your Name", email = "your.email@example.com"},
 ]
 dependencies = [
-    "mcp[cli]",  # Changed from "mcp" to "mcp[cli]" to include typer
+    "mcp[cli]", # Changed from "mcp" to "mcp[cli]" to include typer
     "httpx",
     "beautifulsoup4",
     "newsapi-python",
     "matplotlib",
     "python-dotenv",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +27,13 @@ dev = [
     "mypy",
     "types-beautifulsoup4",
     "types-requests",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.20.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "coverage>=7.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -40,3 +49,25 @@ disallow_incomplete_defs = true
 [tool.black]
 line-length = 100
 target-version = ["py313"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+#addopts = "--cov=tools --cov-report=term --cov-report=html:coverage_html --cov-report=xml"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+source = ["tools"]
+omit = ["*/__init__.py", "*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
+]

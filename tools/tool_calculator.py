@@ -1,7 +1,16 @@
+"""
+Calculator tool for safely evaluating mathematical expressions.
+Supports basic arithmetic operations and common math functions.
+"""
 import math
 import ast
 import operator
+from typing import Union, Any
 from mcp_instance import mcp
+
+class CalculatorError(Exception):
+    """Exception raised for calculator-specific errors."""
+    pass
 
 @mcp.tool()
 async def calculator(expression: str) -> dict:
@@ -26,7 +35,7 @@ async def calculator(expression: str) -> dict:
     }
     
     # Define a safe evaluator
-    def eval_expr(node):
+    def eval_expr(node: ast.AST) -> Union[float, int]:
         if isinstance(node, ast.Num):
             return node.n
         elif isinstance(node, ast.BinOp):
@@ -61,5 +70,8 @@ async def calculator(expression: str) -> dict:
         # Evaluate and return
         result = eval_expr(node)
         return {"result": result, "expression": expression}
-    except Exception as e:
+    except (ValueError, TypeError, SyntaxError, ZeroDivisionError, OverflowError) as e:
         return {"error": str(e), "expression": expression}
+    except Exception as e:
+        # Still catch unknown errors to prevent crashes, but log them differently
+        return {"error": f"Unexpected error: {str(e)}", "expression": expression}

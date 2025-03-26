@@ -32,7 +32,8 @@ async def wikipedia_search(query: str, limit: int = 3) -> dict:
         if search_response.status_code != 200:
             raise Exception(f"Wikipedia API error: {search_response.status_code}")
             
-        search_data = search_response.json()
+        # Need to await the json() method since it's asynchronous
+        search_data = await search_response.json()
         results = search_data.get("query", {}).get("search", [])
         
         if not results:
@@ -56,7 +57,8 @@ async def wikipedia_search(query: str, limit: int = 3) -> dict:
         if extract_response.status_code != 200:
             raise Exception(f"Wikipedia API error: {extract_response.status_code}")
             
-        extract_data = extract_response.json()
+        # Need to await the json() method here too
+        extract_data = await extract_response.json()
         pages = extract_data.get("query", {}).get("pages", {})
         
         detailed_results = []
