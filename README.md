@@ -14,6 +14,8 @@ This has been created to get an understanding of MCP servers, the protocol, and 
 
 ## Launch the server
 
+### Locally/stdio
+
 `uv run mcp dev server.py`
 ```
 (.venv) ➜  mcp-server git:(main) ✗ uv run mcp dev server.py
@@ -22,6 +24,15 @@ Proxy server listening on port 3000
 
 🔍 MCP Inspector is up and running at http://localhost:5173 🚀
 ```
+
+### As a network server
+
+This allows connection to the MCP server from a remote client
+```
+uv run fastmcp run server.py --transport sse```
+```
+
+The server will be available at http://localhost:8000
 
 ## View the tools
 
