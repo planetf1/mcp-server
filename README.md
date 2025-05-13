@@ -54,13 +54,32 @@ The server will be available at http://localhost:8000
 | **news_search** | Searches for recent news articles | NewsAPI | `NEWSAPI_KEY` |
 | **tavily_search** | AI-powered web search | Tavily API | `TAVILY_API_KEY` |
 | **arxiv_search** | Searches academic papers | arXiv API | None |
-| **github_get_file** | Retrieves file contents from GitHub | GitHub API | `GITHUB_TOKEN` |
-| **github_list_issues** | Lists issues in a repository | GitHub API | `GITHUB_TOKEN` |
-| **github_create_issue** | Creates a new issue in a repository | GitHub API | `GITHUB_TOKEN` |
-| **github_list_pull_requests** | Lists PRs in a repository | GitHub API | `GITHUB_TOKEN` |
-| **github_search_code** | Searches code on GitHub | GitHub API | `GITHUB_TOKEN` |
-| **github_user_activity** | Gets a user's GitHub activity summary | GitHub API | `GITHUB_TOKEN` |
+| **github_get_file** | Retrieves file contents from GitHub | GitHub API | `GITHUB_PERSONAL_ACCESS_TOKEN` |
+| **github_list_issues** | Lists issues in a repository | GitHub API | `GITHUB_PERSONAL_ACCESS_TOKEN` |
+| **github_create_issue** | Creates a new issue in a repository | GitHub API | `GITHUB_PERSONAL_ACCESS_TOKEN` |
+| **github_list_pull_requests** | Lists PRs in a repository | GitHub API | `GITHUB_PERSONAL_ACCESS_TOKEN` |
+| **github_search_code** | Searches code on GitHub | GitHub API | `GITHUB_PERSONAL_ACCESS_TOKEN` |
+| **github_user_activity** | Gets a user's GitHub activity summary | GitHub API | `GITHUB_PERSONAL_ACCESS_TOKEN` |
 | **create_thumbnail** | Creates image thumbnails | Local image processing | None |
+
+## Wrapping stdio tools
+
+To wrap a standard input/output (stdio) tool as an MCP server, use the `stdio_mcp_wrapper.py` script:
+
+```bash
+python stdio_mcp_wrapper.py --executable <path_to_executable> [options]
+```
+
+Required argument:
+*   `--executable <path>`: Path to the stdio executable you want to wrap.
+
+Options:
+*   `--args <arg1> <arg2> ...`: Arguments to pass to the executable (default: none).
+*   `--tool-name <name>`: Name of the MCP tool (default: `stdio_tool`).
+*   `--tool-description <description>`: Description of the tool (default: `Executes a wrapped stdio command.`).
+*   `--port <port>`: Port for the MCP server to listen on (default: 3001).
+*   `--env <KEY=VALUE>`: Set an environment variable for the executable.  Can be used multiple times. If not used, the tool inherits the environment of the `stdio_mcp_wrapper.py` process.
+*   `--timeout <seconds>`: Timeout in seconds for the executable (default: 30).
 
 ### Environment Variable Configuration
 
@@ -77,7 +96,7 @@ export NEWSAPI_KEY="your_newsapi_key"
 export TAVILY_API_KEY="your_tavily_api_key"
 
 # GitHub tools
-export GITHUB_TOKEN="your_github_personal_access_token"
+export GITHUB_PERSONAL_ACCESS_TOKEN="your_github_personal_access_token"
 ```
 
 ### Sample Chat Application
@@ -109,7 +128,7 @@ LOG_FILE=chat_interactions.log
 OPENWEATHER_API_KEY=your_api_key_here
 NEWSAPI_KEY=your_api_key_here
 TAVILY_API_KEY=your_api_key_here
-GITHUB_TOKEN=your_token_here
+GITHUB_PERSONAL_ACCESS_TOKEN=your_token_here
 ```
 
 Launch the Chat Application
