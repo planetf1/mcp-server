@@ -142,7 +142,7 @@ uv run mcp dev server.py
 Then, run the chat application in another terminal:
 
 ```
-python run_chat.py
+python clients/run_chat.py
 ```
 
 Interact with the LLM, which now has access to all the tools provided by the MCP server.
@@ -157,3 +157,22 @@ Interact with the LLM, which now has access to all the tools provided by the MCP
 #### Caveats
 
 * It doesn't yet work with the default model.... work in progress!
+
+## Wrapping stdio tools
+
+To wrap a standard input/output (stdio) tool as an MCP server, use the `wrapper/stdio_mcp_wrapper.py` script:
+
+```bash
+python stdio_mcp_wrapper.py --executable <path_to_executable> [options]
+Required argument:
+
+--executable <path>: Path to the stdio executable you want to wrap.
+Options:
+
+--args <arg1> <arg2> ...: Arguments to pass to the executable (default: none).
+--tool-name <name>: Name of the MCP tool (default: stdio_tool).
+--tool-description <description>: Description of the tool (default: Executes a wrapped stdio command.).
+--port <port>: Port for the MCP server to listen on (default: 3001).
+--env <KEY=VALUE>: Set an environment variable for the executable. Can be used multiple times. If not used, the tool inherits the environment of the stdio_mcp_wrapper.py process.
+--timeout <seconds>: Timeout in seconds for the executable (default: 30).
+```
