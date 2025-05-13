@@ -18,6 +18,7 @@ import datetime
 from typing import Dict, List, Any, Optional
 import litellm
 from litellm import completion
+import httpx # For fetching MCP tools
 from litellm.utils import get_secret
 import colorama
 
@@ -51,7 +52,7 @@ logger.propagate = False
 # Configuration via environment variables
 OLLAMA_SERVER = os.environ.get("OLLAMA_SERVER", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "granite3.3:8b")
-MCP_ENDPOINT = os.environ.get("MCP_ENDPOINT", "localhost:3000")
+MCP_ENDPOINT = os.environ.get("MCP_ENDPOINT", "localhost:3001")
 
 # Colors for better terminal experience
 CYAN = colorama.Fore.CYAN
@@ -109,25 +110,89 @@ def format_message(message: Dict[str, str]) -> str:
     else:
         return f"{role}: {content}"
 
-def print_welcome_message() -> None:
+def fetch_mcp_tools(mcp_api_base: str) -> Optional[List[Dict[str, str]]]:
+    """Fetches available tools from the MCP server's OpenAPI schema."""
+    tools_info = []
+    openapi_url = f"{mcp_api_base}/openapi.json"
+    try:
+        logger.info(f"Fetching MCP tools from {openapi_url}")
+        response = httpx.get(openapi_url, timeout=10.0)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        openapi_schema = response.json()
+
+        paths = openapi_schema.get("paths", {})
+        for path, path_item in paths.items():
+            if path.startswith("/tool/") and path.endswith("/call") and "post" in path_item:
+                operation = path_item["post"]
+                # Extract tool name from path: /tool/{tool_name}/call
+                tool_name_parts = path.split('/')
+                if len(tool_name_parts) == 4: # ['', 'tool', tool_name, 'call']
+                    tool_name = tool_name_parts[2]
+                    description = operation.get("description", "No description available.")
+                    tools_info.append({"name": tool_name, "description": description})
+        
+        if not tools_info:
+            logger.warning(f"No MCP tools found in OpenAPI schema at {openapi_url}")
+        else:
+            logger.info(f"Found MCP tools: {tools_info}")
+        return tools_info
+    except httpx.RequestError as e:
+        logger.error(f"Error fetching MCP tools from {openapi_url}: {e}")
+        print(f"{RED}Error connecting to MCP server to fetch tools: {e}{RESET}")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error fetching MCP tools: {e.response.status_code} from {openapi_url}")
+        print(f"{RED}HTTP error {e.response.status_code} while fetching tools from MCP server.{RESET}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding JSON from MCP tools endpoint {openapi_url}: {e}")
+        print(f"{RED}Error parsing tool information from MCP server.{RESET}")
+    except Exception as e:
+        logger.error(f"Unexpected error fetching MCP tools: {e}")
+        print(f"{RED}An unexpected error occurred while fetching MCP tools.{RESET}")
+    return None
+
+def print_welcome_message(tools: Optional[List[Dict[str, str]]], mcp_api_base: str) -> None:
     """Print welcome message with configuration details."""
     print(f"\n{GREEN}=" * 80)
     print(f"LiteLLM Chat with Ollama and MCP Tools")
     print(f"=" * 80)
     print(f"Model: {OLLAMA_MODEL}")
     print(f"Ollama Server: {OLLAMA_SERVER}")
-    print(f"MCP Endpoint: {MCP_ENDPOINT}")
+    print(f"MCP Endpoint: {MCP_ENDPOINT} (Tools fetched from {mcp_api_base})")
     print(f"Log File: {LOG_FILE}")
+
+    print(f"\n{YELLOW}MCP Tools Information:{RESET}")
+    if tools:
+        print(f"{GREEN}Available MCP Tools:{RESET}")
+        for tool in tools:
+            print(f"  - {CYAN}{tool['name']}{RESET}: {tool['description']}")
+    elif tools is None: # Error occurred during fetch
+        print(f"{RED}Could not retrieve tool information from MCP server.{RESET}")
+    else: # Empty list, no tools found but no error
+        print(f"{YELLOW}No MCP tools seem to be available or registered on the server.{RESET}")
+    
     print(f"Type 'exit' or 'quit' to end the chat.")
+    print(f"=" * 80 + RESET)
 
 def main() -> None:
     """Run the chat application."""
     setup_litellm()
-    print_welcome_message()
+
+    mcp_api_base = f"http://{MCP_ENDPOINT}"
+    available_tools = fetch_mcp_tools(mcp_api_base)
+
+    print_welcome_message(available_tools, mcp_api_base)
 
     # Start with a system message to provide context
     system_prompt = "You are a helpful AI assistant with access to various tools through MCP. "
-    system_prompt += "You can search the web, fetch weather data, search Wikipedia, and more. "
+    if available_tools:
+        tool_names = [tool['name'] for tool in available_tools]
+        if tool_names:
+            system_prompt += f"Available tools include: {', '.join(tool_names)}. "
+        else:
+            system_prompt += "No specific tools appear to be registered. "
+    else:
+        system_prompt += "Could not determine available tools. "
+    
     system_prompt += "Use the appropriate tools when needed to provide accurate and helpful information."
 
     messages = [
