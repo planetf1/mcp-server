@@ -17,6 +17,9 @@ from typing import Dict, List, Any, Union
 
 from mcp.server.fastmcp import FastMCP
 
+# Create an MCP server instance globally so the decorator can find it
+mcp = FastMCP("StdioWrapperMCPServer")
+
 async def run_external_command(
     executable: str,
     exec_args: List[str],
@@ -89,30 +92,16 @@ def main():
     parser.add_argument("--timeout", type=int, default=30, help="Timeout in seconds for the external command.")
     parser.add_argument("--env", action='append', default=[], help="Environment variables to set for the command (e.g., VAR=value). Can be used multiple times.")
 
-    # Use parse_known_args to separate arguments known to the wrapper
-    # from those intended for the wrapped executable.
-    cli_args, unknown_args = parser.parse_known_args()
+    cli_args = parser.parse_args()
 
-    # Append any unknown arguments to cli_args.args.
-    # This assumes all unknown arguments are intended for the wrapped executable.
-    if unknown_args:
-        print(f"Treating unrecognized arguments as arguments for the executable: {unknown_args}", file=sys.stderr)
-        cli_args.args.extend(unknown_args)
-
-    # Create the MCP server instance
-    mcp_server_instance = FastMCP(
-        "StdioWrapperMCPServer",
-        host=cli_args.host,
-        port=cli_args.port
-    )
     # Define the tool function dynamically using the parsed arguments
     # The mcp.tool decorator needs to be applied at definition time.
     # We use a closure to capture cli_args for the tool function.
-
+    
     # This is a bit of a workaround as @mcp.tool needs to decorate a function directly.
     # We'll define the tool function inside main after parsing args.
-
-    @mcp_server_instance.tool(
+    
+    @mcp.tool(
         name=cli_args.tool_name,
         description=cli_args.tool_description,
         # FastMCP infers schema from type hints.
@@ -134,27 +123,7 @@ def main():
 
     print(f"Starting MCP server for tool '{cli_args.tool_name}' on {cli_args.host}:{cli_args.port}")
     print(f"Wrapping executable: {cli_args.executable} {' '.join(cli_args.args)}")
-
-    exit_code = 0
-    try:
-        # This call is blocking and should ideally handle SIGINT (Ctrl+C)
-        # by shutting down gracefully.        
-        mcp_server_instance.run()
-        # If .run() returns, it implies a graceful shutdown.
-        print("MCP server run method completed.", file=sys.stderr)
-    except KeyboardInterrupt:
-        print("\nCtrl+C detected in wrapper. Server should be shutting down.", file=sys.stderr)
-        # Uvicorn (if used by FastMCP) should handle SIGINT and initiate shutdown.
-        # This catch is for the case where KeyboardInterrupt propagates from run().
-        exit_code = 130 # Standard exit code for processes terminated by Ctrl+C
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
-        exit_code = 1
-    finally:
-        print("Exiting stdio_mcp_wrapper.py.", file=sys.stderr)
-        sys.exit(exit_code) # Ensure the script exits
+    mcp.run(host=cli_args.host, port=cli_args.port)
 
 if __name__ == "__main__":
     main()
