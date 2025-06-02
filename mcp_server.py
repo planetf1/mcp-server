@@ -6,15 +6,16 @@ import importlib.util
 import inspect
 import sys
 import asyncio
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from mcp.server.fastmcp import FastMCP
 
 # Logger for this application
 logger = logging.getLogger(__name__)
-mcp_sdk_logger = logging.getLogger("mcp") # Updated to reflect new package name
+mcp_sdk_logger = logging.getLogger("mcp")
 
 
 # --- Built-in Tools ---
-def echo(*args, **kwargs):
+def echo(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     """
     Echoes back the invocation parameters.
     """
@@ -22,7 +23,7 @@ def echo(*args, **kwargs):
     return {"args": args, "kwargs": kwargs}
 
 
-def health():
+def health() -> str:
     """
     Reports the server's health status.
     """
@@ -30,7 +31,7 @@ def health():
     return "ready"
 
 
-def setup_logging(log_file=None):
+def setup_logging(log_file: Optional[str] = None) -> None:
     """
     Configures logging for the application and MCP SDK.
     """
@@ -80,12 +81,12 @@ def setup_logging(log_file=None):
         mcp_sdk_logger.setLevel(logging.WARNING)
         # If you want MCP INFO/DEBUG on console when no log file, add console_handler to mcp_sdk_logger here.
 
+ToolFunctionType = Callable[..., Any]
 
-def load_tool_from_file(file_path):
+def load_tool_from_file(file_path: str) -> Tuple[Optional[ToolFunctionType], Optional[str]]:
     """
     Loads a tool from a Python file.
     Validates that the file contains exactly one function definition (not imported ones).
-    Allows imports within the tool file.
     """
     module_name = os.path.splitext(os.path.basename(file_path))[0]
     spec = importlib.util.spec_from_file_location(module_name, file_path)
@@ -94,7 +95,11 @@ def load_tool_from_file(file_path):
         logger.error(f"Could not create module spec for {file_path}")
         return None, None
 
-    module = importlib.util.module_from_spec(spec)
+    try:
+        module = importlib.util.module_from_spec(spec)
+    except Exception as e: # Should not happen if spec is valid, but good for robustness
+        logger.error(f"Could not create module from spec for {file_path}: {e}", exc_info=True)
+        return None, None
 
     tool_dir = os.path.dirname(os.path.abspath(file_path))
     path_prepended = False
@@ -103,7 +108,11 @@ def load_tool_from_file(file_path):
         path_prepended = True
 
     try:
-        spec.loader.exec_module(module)
+        if spec.loader: # Ensure loader is not None
+            spec.loader.exec_module(module)
+        else: # Should be caught by the spec check above, but defensive
+            logger.error(f"Module spec loader is None for {file_path}")
+            return None, None
     except Exception as e:
         logger.error(f"Error executing module {module_name} from {file_path}: {e}", exc_info=True)
         return None, None
@@ -112,7 +121,7 @@ def load_tool_from_file(file_path):
             if sys.path and sys.path[0] == tool_dir:
                 sys.path.pop(0)
 
-    functions = []
+    functions: List[ToolFunctionType] = []
     for name, member in inspect.getmembers(module):
         if inspect.isfunction(member) and member.__module__ == module_name:
             # Check if the function is defined in this module, not imported.
@@ -137,11 +146,11 @@ def load_tool_from_file(file_path):
     return tool_function, module_name
 
 
-def discover_tools(tools_paths_list):
+def discover_tools(tools_paths_list: List[str]) -> Dict[str, Tuple[ToolFunctionType, str]]:
     """
     Discovers tools from the given list of paths (each can be a file or directory).
     """
-    discovered_tools = {}
+    discovered_tools: Dict[str, Tuple[ToolFunctionType, str]] = {}
     if not tools_paths_list: # Handle empty list if no paths are provided
         return discovered_tools
 
@@ -168,10 +177,10 @@ def discover_tools(tools_paths_list):
     return discovered_tools
 
 
-async def run_server_transport(mcp_instance, transport_type, port):
+async def run_server_transport(mcp_instance: FastMCP, transport_type: str, port: int) -> None:
     # The mcp_instance.run() method is blocking.
     # We run it in a separate thread to keep the asyncio event loop free.
-    def _run_blocking():
+    def _run_blocking() -> None:
         if transport_type == "stdio":
             logger.info("Starting MCP server with stdio transport.")
             mcp_instance.run(transport="stdio")
@@ -187,16 +196,22 @@ async def run_server_transport(mcp_instance, transport_type, port):
 
     try:
         await asyncio.to_thread(_run_blocking)
-    except ValueError:
+    except asyncio.CancelledError:
+        # This occurs if the task created by asyncio.to_thread is cancelled.
+        # The thread running _run_blocking may or may not terminate immediately
+        # depending on whether _run_blocking is itself interruptible.
+        logger.debug("run_server_transport: asyncio.to_thread task was cancelled.")
+        raise # Propagate CancelledError to amain
+    except ValueError: # For unsupported transport type from _run_blocking
         # Let amain's general exception handler deal with this after logging.
         # sys.exit(1) here would only exit the thread.
         raise # Re-raise the ValueError to be caught by amain
 
 
-async def amain():
+async def amain() -> None:
     # Add these lines for diagnostics
-    print(f"DEBUG: Executing with Python: {sys.executable}")
-    print(f"DEBUG: Python sys.path: {sys.path}")
+    logger.debug(f"Executing with Python: {sys.executable}")
+    logger.debug(f"Python sys.path: {sys.path}")
     parser = argparse.ArgumentParser(
         description="MCP Tool Server", formatter_class=argparse.RawTextHelpFormatter
     )
@@ -230,7 +245,7 @@ async def amain():
     setup_logging(args.log)
 
     mcp_server_instance = FastMCP()
-    registered_tools_info = []
+    registered_tools_info: List[str] = []
 
     # Register built-in tools
     mcp_server_instance.add_tool(echo)
@@ -255,12 +270,17 @@ async def amain():
 
     try:
         await run_server_transport(mcp_server_instance, args.transport, args.port)
+    except asyncio.CancelledError:
+        # This is the most common path for Ctrl+C when using asyncio.run(),
+        # as asyncio.run() cancels the main coroutine.
+        logger.info("MCP Server main task cancelled (Ctrl+C pressed). Shutting down...")
     except KeyboardInterrupt:
-        logger.info("MCP Server shutting down gracefully.")
+        # This might be caught if KeyboardInterrupt propagates from the thread
+        # before asyncio.run() cancels amain.
+        logger.info("MCP Server received KeyboardInterrupt. Shutting down...")
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
-        sys.exit(1)
-
+        # Removed sys.exit(1); asyncio.run() will handle process exit.
 
 if __name__ == "__main__":
     asyncio.run(amain())
