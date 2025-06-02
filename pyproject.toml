@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcps"
+version = "0.1.0"
+description = "MCP server for experimenting with LLM tools"
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [
+    {name = "Nigel Jones", email = "nigel.l.jones@gmail.com"},
+]
+dependencies = [
+    "mcp[cli] (>=1.9.2,<2.0.0)", # Changed from "mcp" to "mcp[cli]" to include typer
+    "httpx",
+    "fastmcp>=2.2.1",
+    "requests>=2.32.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy",
+]
+test = [
+    "pytest>=7.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["tools", "resources", "prompts"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+#addopts = "--cov=tools --cov-report=term --cov-report=html:coverage_html --cov-report=xml"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+source = ["tools"]
+omit = ["*/__init__.py", "*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
+]
